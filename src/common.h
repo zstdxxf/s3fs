@@ -39,6 +39,7 @@ extern bool           nomultipart;
 extern bool           pathrequeststyle;
 extern bool           complement_stat;
 extern bool           noxmlns;
+extern bool           listobjects_name_only;
 extern std::string    program_name;
 extern std::string    service_path;
 extern std::string    s3host;

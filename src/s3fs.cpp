@@ -27,6 +27,7 @@
 #include <getopt.h>
 
 #include <fstream>
+#include <time.h>
 
 #include "common.h"
 #include "s3fs.h"
@@ -2569,6 +2570,38 @@ static S3fsCurl* multi_head_retry_callback(S3fsCurl* s3fscurl)
     return newcurl;
 }
 
+static int readdir_name_only(const char* path, const S3ObjList& head, void* buf, fuse_fill_dir_t filler) {
+    s3obj_list_t  headlist;
+    s3obj_list_t  fillerlist;
+    int           result = 0;
+
+    S3FS_PRN_INFO1("[path=%s][list=%zu]", path, headlist.size());
+
+    // Make base path list.
+    head.GetNameList(headlist, true, false);  // get name with "/".
+
+    s3obj_list_t::iterator iter;
+
+    fillerlist.clear();
+    for(iter = headlist.begin(); headlist.end() != iter; iter = headlist.erase(iter)){
+        std::string disppath = path + (*iter);
+        std::string fillpath = disppath;
+        if('/' == *disppath.rbegin()){
+            fillpath.erase(fillpath.length() -1);
+        }
+        fillerlist.push_back(fillpath);
+    }
+
+    for(iter = fillerlist.begin(); fillerlist.end() != iter; ++iter){
+        std::string bpath = mybasename((*iter));
+        if(use_wtf8){
+            bpath = s3fs_wtf8_decode(bpath);
+        }
+        filler(buf, bpath.c_str(), 0, 0);
+    }
+    return result;
+}
+
 static int readdir_multi_head(const char* path, const S3ObjList& head, void* buf, fuse_fill_dir_t filler)
 {
     S3fsMultiCurl curlmulti(S3fsCurl::GetMaxMultiRequest());
@@ -2684,10 +2717,16 @@ static int s3fs_readdir(const char* _path, void* buf, fuse_fill_dir_t filler, of
     if(strcmp(path, "/") != 0){
         strpath += "/";
     }
-    if(0 != (result = readdir_multi_head(strpath.c_str(), head, buf, filler))){
-        S3FS_PRN_ERR("readdir_multi_head returns error(%d).", result);
+    if (listobjects_name_only){
+        result = readdir_name_only(strpath.c_str(), head, buf, filler);
+    } else {
+        if(0 != (result = readdir_multi_head(strpath.c_str(), head, buf, filler))){
+            S3FS_PRN_ERR("readdir_multi_head returns error(%d).", result);
+        }
     }
+
     S3FS_MALLOCTRIM(0);
+
 
     return result;
 }
@@ -4220,6 +4259,10 @@ static int my_fuse_opt_proc(void* data, const char* arg, int key, struct fuse_ar
         }
         if(0 == strcmp(arg, "listobjectsv2")){
             S3fsCurl::SetListObjectsV2(true);
+            return 0;
+        }
+        if (0 == strcmp(arg, "listobjects_name_only")) {
+            listobjects_name_only = true;
             return 0;
         }
         if(0 == strcmp(arg, "use_xattr")){

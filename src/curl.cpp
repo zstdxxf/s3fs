@@ -2326,6 +2326,15 @@ int S3fsCurl::RequestPerform(bool dontAddAuthHeaders /*=false*/)
                     break;
                 }
 
+                if (responseCode == 429 || responseCode == 500 || responseCode > 501) {
+                    S3FS_PRN_INFO3("HTTP response code %ld was returned, slowing down", responseCode);
+                    S3FS_PRN_DBG("Body Text: %s", bodydata.str());
+                    // Add jitter to avoid thundering herd.
+                    unsigned int sleep_time = 2 << retry_count;
+                    if (retrycnt < S3fsCurl::retries - 1) sleep(sleep_time + static_cast<unsigned int>(random()) % sleep_time);
+                    break;
+                }
+
                 {
                     // Try to parse more specific AWS error code otherwise fall back to HTTP error code.
                     std::string value;
@@ -2389,15 +2398,6 @@ int S3fsCurl::RequestPerform(bool dontAddAuthHeaders /*=false*/)
                         result = -ENOTSUP;
                         break;
 
-                    case 500:
-                    case 503: {
-                        S3FS_PRN_INFO3("HTTP response code %ld was returned, slowing down", responseCode);
-                        S3FS_PRN_DBG("Body Text: %s", bodydata.str());
-                        // Add jitter to avoid thundering herd.
-                        unsigned int sleep_time = 2 << retry_count;
-                        sleep(sleep_time + static_cast<unsigned int>(random()) % sleep_time);
-                        break;
-                    }
                     default:
                         S3FS_PRN_ERR("HTTP response code %ld, returning EIO. Body Text: %s", responseCode, bodydata.str());
                         result = -EIO;

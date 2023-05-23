@@ -29,6 +29,7 @@ bool nomultipart                  = false;
 bool pathrequeststyle             = false;
 bool complement_stat              = false;
 bool noxmlns                      = false;
+bool listobjects_name_only        = false;
 std::string program_name;
 std::string service_path          = "/";
 std::string s3host                = "https://s3.amazonaws.com";
